@@ -48,8 +48,7 @@ jobs:
         echo "✅ Teste 2: CSS responsivo - PASSOU"
         echo "✅ Teste 3: JavaScript funcional - PASSOU"
         echo "✅ Teste 4: Acessibilidade - PASSOU"
-        echo "🎉 Todos os ${{ env.TEST_COUNT || '4' }} testes passaram!"
-        
+        echo "🎉 Todos os ${TEST_COUNT:-4} testes passaram!"
     - name: 🏗️ Build da aplicação
       run: |
         echo "🔨 Iniciando processo de build..."
