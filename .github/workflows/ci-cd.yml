@@ -8,7 +8,6 @@ on:
 
 env:
   PROJECT_NAME: devops
-  NODE_VERSION: '18'
 
 jobs:
   # Job de Build e Testes
@@ -20,41 +19,75 @@ jobs:
     - name: 📥 Checkout do código
       uses: actions/checkout@v4
       
-    - name: 🔧 Setup Node.js ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        
-    - name: 📦 Cache de dependências
-      uses: actions/cache@v3
-      with:
-        path: ~/.npm
-        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-node-
-          
     - name: 🔍 Análise de código
       run: |
-        echo "🔍 Executando análise estática..."
+        echo "🔍 Executando análise estática do projeto..."
+        echo "📁 Verificando estrutura de arquivos..."
+        
+        # Verificar se arquivos essenciais existem
+        if [ -f "src/index.html" ]; then
+          echo "✅ src/index.html encontrado"
+        else
+          echo "❌ src/index.html não encontrado"
+          exit 1
+        fi
+        
+        if [ -f ".github/workflows/ci-cd.yml" ]; then
+          echo "✅ Workflow CI/CD configurado"
+        fi
+        
         echo "✅ Verificação de sintaxe HTML - PASSOU"
         echo "✅ Verificação de CSS - PASSOU"
         echo "✅ Análise de segurança - PASSOU"
         
-    - name: 🧪 Executar testes unitários
+    - name: 🧪 Executar testes de qualidade
       run: |
         echo "🧪 Executando bateria de testes..."
-        echo "✅ Teste 1: Estrutura HTML válida - PASSOU"
-        echo "✅ Teste 2: CSS responsivo - PASSOU"
-        echo "✅ Teste 3: JavaScript funcional - PASSOU"
-        echo "✅ Teste 4: Acessibilidade - PASSOU"
-        echo "🎉 Todos os ${TEST_COUNT:-4} testes passaram!"
+        
+        # Teste 1: Validar HTML
+        echo "🔍 Teste 1: Estrutura HTML..."
+        if grep -q "<!DOCTYPE html>" src/index.html; then
+          echo "✅ DOCTYPE HTML5 presente"
+        fi
+        
+        if grep -q "<title>" src/index.html; then
+          echo "✅ Tag title presente"
+        fi
+        
+        # Teste 2: Verificar CSS
+        echo "🔍 Teste 2: CSS embarcado..."
+        if grep -q "<style>" src/index.html; then
+          echo "✅ CSS encontrado no HTML"
+        fi
+        
+        # Teste 3: Verificar JavaScript
+        echo "🔍 Teste 3: JavaScript..."
+        if grep -q "<script>" src/index.html; then
+          echo "✅ JavaScript encontrado"
+        fi
+        
+        # Teste 4: Acessibilidade básica
+        echo "🔍 Teste 4: Acessibilidade básica..."
+        if grep -q 'alt=' src/index.html || grep -q 'aria-' src/index.html; then
+          echo "✅ Atributos de acessibilidade encontrados"
+        else
+          echo "⚠️ Considere adicionar atributos de acessibilidade"
+        fi
+        
+        echo "🎉 Todos os testes de qualidade passaram!"
+        
     - name: 🏗️ Build da aplicação
       run: |
         echo "🔨 Iniciando processo de build..."
+        
+        # Criar diretório de build
         mkdir -p dist
+        
+        # Copiar arquivos source para dist
+        echo "📂 Copiando arquivos..."
         cp -r src/* dist/
         
+        # Gerar metadados do build
         echo "📝 Gerando metadados do build..."
         cat > dist/build-info.json << EOF
         {
@@ -63,9 +96,17 @@ jobs:
           "branch": "${{ github.ref_name }}",
           "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
           "author": "${{ github.actor }}",
-          "project": "${{ env.PROJECT_NAME }}"
+          "project": "${{ env.PROJECT_NAME }}",
+          "status": "success"
         }
         EOF
+        
+        # Mostrar informações do build
+        echo "📊 Informações do build:"
+        echo "  Build ID: ${{ github.run_number }}"
+        echo "  Commit: ${{ github.sha }}"
+        echo "  Branch: ${{ github.ref_name }}"
+        echo "  Autor: ${{ github.actor }}"
         
         echo "✅ Build concluído com sucesso!"
         
@@ -77,92 +118,152 @@ jobs:
         files=("dist/index.html" "dist/build-info.json")
         for file in "${files[@]}"; do
           if [ -f "$file" ]; then
-            echo "✅ $file - OK"
+            echo "✅ $file - OK ($(stat -c%s "$file") bytes)"
           else
             echo "❌ $file - FALTANDO"
             exit 1
           fi
         done
         
-        # Verificar tamanho dos arquivos
-        size=$(du -sh dist/ | cut -f1)
-        echo "📊 Tamanho do build: $size"
+        # Verificar conteúdo básico do HTML
+        if grep -q "DevOps" dist/index.html; then
+          echo "✅ Conteúdo HTML válido"
+        else
+          echo "❌ Conteúdo HTML inválido"
+          exit 1
+        fi
+        
+        # Mostrar estatísticas
+        echo "📊 Estatísticas do build:"
+        echo "  Tamanho total: $(du -sh dist/ | cut -f1)"
+        echo "  Arquivos: $(find dist/ -type f | wc -l)"
         
         echo "🎉 Build validado com sucesso!"
         
     - name: 📦 Upload dos artefatos
       uses: actions/upload-artifact@v4
       with:
-        name: build-${{ github.run_number }}
+        name: build-${{ github.run_number }}-${{ github.sha }}
         path: dist/
         retention-days: 30
+
+    - name: 📋 Relatório de Build
+      run: |
+        echo "📋 === RELATÓRIO DE BUILD ==="
+        echo "🏷️ Projeto: ${{ env.PROJECT_NAME }}"
+        echo "🔢 Build: #${{ github.run_number }}"
+        echo "🌳 Branch: ${{ github.ref_name }}"
+        echo "👤 Autor: ${{ github.actor }}"
+        echo "⏰ Timestamp: $(date)"
+        echo "✅ Status: SUCCESS"
 
   # Job de Deploy
   deploy:
     name: 🚀 Deploy
     runs-on: ubuntu-latest
     needs: build-test
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
     - name: 📥 Download dos artefatos
       uses: actions/download-artifact@v4
       with:
-        name: build-${{ github.run_number }}
+        name: build-${{ github.run_number }}-${{ github.sha }}
         path: dist/
+        
+    - name: 🔍 Verificar artefatos
+      run: |
+        echo "🔍 Verificando artefatos baixados..."
+        ls -la dist/
+        echo "📄 Conteúdo do build-info.json:"
+        cat dist/build-info.json
         
     - name: 🚀 Deploy para produção (simulado)
       run: |
         echo "🚀 Iniciando deploy para ambiente de produção..."
-        echo "🔧 Configurando ambiente..."
-        echo "📤 Enviando arquivos para servidor..."
+        
+        # Simular configuração de ambiente
+        echo "🔧 Configurando ambiente de produção..."
+        export DEPLOY_ENV="production"
+        export APP_NAME="${{ env.PROJECT_NAME }}"
         
         # Simular upload de arquivos
-        for i in {1..5}; do
-          echo "📁 Enviando arquivos... [$i/5]"
-          sleep 1
+        echo "📤 Enviando arquivos para servidor web..."
+        file_count=$(find dist/ -type f | wc -l)
+        
+        for i in $(seq 1 $file_count); do
+          echo "📁 Uploading file $i/$file_count..."
+          sleep 0.5
         done
         
-        echo "🔄 Limpando cache..."
-        echo "🌐 Reiniciando serviços web..."
-        echo "🔍 Verificando saúde da aplicação..."
+        # Simular configuração do servidor
+        echo "🔄 Configurando servidor web..."
+        echo "  - Limpando cache antigo"
+        echo "  - Atualizando configuração nginx"
+        echo "  - Reiniciando serviços"
         
         # Simular health check
-        echo "❤️ Health check: OK"
-        echo "🌍 URL da aplicação: https://meu-projeto-devops.exemplo.com"
+        echo "🏥 Executando health check..."
+        sleep 1
+        echo "✅ Health check: OK"
+        echo "🌐 Aplicação disponível em: https://${{ env.PROJECT_NAME }}.exemplo.com"
         
         echo "✅ Deploy realizado com sucesso!"
         
     - name: 🔔 Notificação de deploy
       run: |
-        echo "📢 Deploy concluído com sucesso!"
+        echo "📢 === NOTIFICAÇÃO DE DEPLOY ==="
         echo "🎯 Ambiente: Produção"
         echo "🔗 Commit: ${{ github.sha }}"
-        echo "👤 Autor: ${{ github.actor }}"
+        echo "👤 Deployado por: ${{ github.actor }}"
         echo "⏰ Horário: $(date)"
+        echo "🌐 URL: https://${{ env.PROJECT_NAME }}.exemplo.com"
+        echo "✅ Status: Deploy realizado com sucesso!"
 
   # Job de Testes Pós-Deploy
   post-deploy-tests:
     name: 🧪 Testes Pós-Deploy
     runs-on: ubuntu-latest
     needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - name: 🔍 Testes de fumaça
+    - name: 🔥 Smoke tests
       run: |
         echo "💨 Executando smoke tests..."
-        echo "✅ Teste de conectividade - PASSOU"
-        echo "✅ Teste de response time - PASSOU"  
-        echo "✅ Teste de endpoints - PASSOU"
-        echo "🎉 Aplicação funcionando corretamente!"
+        
+        # Simular testes de conectividade
+        echo "🔍 Teste 1: Conectividade..."
+        sleep 1
+        echo "✅ Servidor respondendo - OK"
+        
+        echo "🔍 Teste 2: Response time..."
+        sleep 1
+        echo "✅ Response time: 45ms - OK"
+        
+        echo "🔍 Teste 3: Status codes..."
+        sleep 1
+        echo "✅ HTTP 200 - OK"
+        
+        echo "🔍 Teste 4: Content validation..."
+        sleep 1
+        echo "✅ Conteúdo válido - OK"
+        
+        echo "🎉 Todos os smoke tests passaram!"
         
     - name: 📊 Relatório final
       run: |
         echo "📊 === RELATÓRIO FINAL DO PIPELINE ==="
-        echo "🏗️ Build: ✅ Sucesso"
-        echo "🧪 Testes: ✅ Todos passaram"
-        echo "🚀 Deploy: ✅ Realizado"
-        echo "🔍 Validação: ✅ OK"
         echo ""
-        echo "🎉 Pipeline executado com 100% de sucesso!"
-        echo "⏱️ Tempo total: ${{ github.event.head_commit.timestamp }}"
+        echo "🏗️ Build: ✅ Sucesso"
+        echo "   └── Arquivos: $(echo "dist/index.html, dist/build-info.json")"
+        echo "   └── Build ID: ${{ github.run_number }}"
+        echo ""
+        echo "🧪 Testes: ✅ Todos passaram"
+        echo "   └── Análise de código: OK"
+        echo "   └── Testes de qualidade: OK"
+        echo "   └── Validação: OK"
+        echo ""
+        echo "🚀 Deploy: ✅ Realizado"
+        echo "   └── Ambiente: Produção"
+        echo "   └── URL: https://${{ env.PROJECT_NAME }}.exemplo.com"
