@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  PROJECT_NAME: meu-projeto-devops
+  PROJECT_NAME: devops
   NODE_VERSION: '18'
 
 jobs:
